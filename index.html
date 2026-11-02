@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF a WebP</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --card: #ffffff; --text: #1d1d1f; --muted: #6e6e73;
+    --line: #e4e4e0; --accent: #2f6df6; --accent-dark: #1f56d1; --ok: #1a9b5b; --err: #d93a3a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151516; --card: #1f1f21; --text: #f2f2f3; --muted: #9a9aa0; --line: #313135; --accent: #5b8dff; --accent-dark: #7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh; display: flex; justify-content: center; padding: 40px 16px;
+  }
+  main { width: 100%; max-width: 560px; }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.5px; }
+  .sub { color: var(--muted); margin: 0 0 28px; font-size: 15px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; margin-bottom: 16px; }
+  .drop {
+    border: 2px dashed var(--line); border-radius: 14px; padding: 36px 16px; text-align: center;
+    transition: .15s; color: var(--muted);
+  }
+  .drop.over { border-color: var(--accent); background: rgba(47,109,246,.06); color: var(--text); }
+  .drop strong { display: block; color: var(--text); font-size: 17px; margin-bottom: 4px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+  button, .btn {
+    font: inherit; font-weight: 600; font-size: 14px; border: 0; border-radius: 10px; padding: 10px 16px;
+    cursor: pointer; background: var(--accent); color: #fff; transition: .15s; display: inline-block; text-decoration: none;
+  }
+  button:hover, .btn:hover { background: var(--accent-dark); }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button.ghost:hover { background: var(--bg); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .big { width: 100%; padding: 14px; font-size: 16px; }
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px; }
+  select, input[type=range] { width: 100%; }
+  select { font: inherit; padding: 9px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+  .list { max-height: 160px; overflow: auto; font-size: 13px; margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .list div { padding: 3px 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .count { font-size: 14px; margin-top: 14px; text-align: center; }
+  .bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 14px 0 8px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .status { font-size: 13px; color: var(--muted); text-align: center; min-height: 18px; }
+  .done { text-align: center; }
+  .done .ok { color: var(--ok); font-weight: 600; margin-bottom: 12px; }
+  .errors { color: var(--err); font-size: 13px; margin-top: 10px; }
+  .hidden { display: none; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>PDF a WebP</h1>
+  <p class="sub">Convierte tus PDF en imágenes WebP. Todo ocurre en tu navegador: tus archivos nunca se suben a internet.</p>
+
+  <div class="card">
+    <div class="drop" id="drop">
+      <strong>Arrastra aquí una carpeta o tus PDF</strong>
+      o usa los botones
+      <div class="row">
+        <button id="pickFolder">Seleccionar carpeta</button>
+        <button class="ghost" id="pickFiles">Seleccionar PDF</button>
+      </div>
+    </div>
+    <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
+    <input type="file" id="fileInput" accept="application/pdf,.pdf" multiple hidden>
+    <div class="count hidden" id="count"></div>
+    <div class="list hidden" id="list"></div>
+  </div>
+
+  <div class="card">
+    <div class="opts">
+      <div>
+        <label for="scale">Resolución</label>
+        <select id="scale">
+          <option value="1">Baja (rápida)</option>
+          <option value="1.5">Media</option>
+          <option value="2" selected>Alta (recomendada)</option>
+          <option value="3">Muy alta</option>
+        </select>
+      </div>
+      <div>
+        <label for="quality">Calidad: <span id="qv">85</span>%</label>
+        <input type="range" id="quality" min="40" max="100" value="85">
+      </div>
+    </div>
+  </div>
+
+  <button class="big" id="convert" disabled>Convertir a WebP</button>
+
+  <div class="card hidden" id="progressCard" style="margin-top:16px">
+    <div class="bar"><i id="barFill"></i></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card done hidden" id="doneCard">
+    <div class="ok" id="doneMsg"></div>
+    <a class="btn" id="download" download="pdf-a-webp.zip">Descargar ZIP</a>
+    <div class="errors" id="errors"></div>
+  </div>
+
+  <footer>Cada PDF se guarda en su propia carpeta dentro del ZIP, una imagen por página.</footer>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const $ = id => document.getElementById(id);
+let items = []; // {file, path}
+let zipUrl = null;
+
+function addItem(file, path) {
+  if (!file.name.toLowerCase().endsWith('.pdf')) return;
+  if (items.some(i => i.path === path && i.file.size === file.size)) return;
+  items.push({ file, path });
+}
+
+function refresh() {
+  const has = items.length > 0;
+  $('count').classList.toggle('hidden', !has);
+  $('list').classList.toggle('hidden', !has);
+  $('convert').disabled = !has;
+  $('count').textContent = has ? `${items.length} PDF listo${items.length === 1 ? '' : 's'} para convertir` : '';
+  $('list').innerHTML = '';
+  items.forEach(i => { const d = document.createElement('div'); d.textContent = i.path; $('list').appendChild(d); });
+  $('doneCard').classList.add('hidden');
+}
+
+$('pickFolder').onclick = () => $('folderInput').click();
+$('pickFiles').onclick = () => $('fileInput').click();
+$('folderInput').onchange = e => { [...e.target.files].forEach(f => addItem(f, f.webkitRelativePath || f.name)); e.target.value = ''; refresh(); };
+$('fileInput').onchange = e => { [...e.target.files].forEach(f => addItem(f, f.name)); e.target.value = ''; refresh(); };
+$('quality').oninput = e => $('qv').textContent = e.target.value;
+
+// Arrastrar y soltar (incluye carpetas)
+const drop = $('drop');
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', async e => {
+  const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  for (const en of entries) await walk(en, '');
+  refresh();
+});
+
+function readAll(reader) {
+  return new Promise((res, rej) => {
+    const out = [];
+    (function next() {
+      reader.readEntries(batch => { if (!batch.length) return res(out); out.push(...batch); next(); }, rej);
+    })();
+  });
+}
+async function walk(entry, prefix) {
+  if (entry.isFile) {
+    const file = await new Promise((res, rej) => entry.file(res, rej));
+    addItem(file, prefix + entry.name);
+  } else if (entry.isDirectory) {
+    const children = await readAll(entry.createReader());
+    for (const c of children) await walk(c, prefix + entry.name + '/');
+  }
+}
+
+const toBlob = (canvas, q) => new Promise(res => canvas.toBlob(res, 'image/webp', q));
+const MAX_PIXELS = 16_000_000;
+
+$('convert').onclick = async () => {
+  if (!items.length) return;
+  const baseScale = parseFloat($('scale').value);
+  const quality = parseInt($('quality').value, 10) / 100;
+  const zip = new JSZip();
+  const errors = [];
+  let totalPages = 0;
+  let notWebp = false;
+
+  $('convert').disabled = true;
+  $('doneCard').classList.add('hidden');
+  $('progressCard').classList.remove('hidden');
+  const setProgress = (p, msg) => { $('barFill').style.width = (p * 100).toFixed(1) + '%'; $('status').textContent = msg; };
+
+  for (let n = 0; n < items.length; n++) {
+    const { file, path } = items[n];
+    const folder = zip.folder(path.replace(/\.pdf$/i, ''));
+    try {
+      setProgress(n / items.length, `Abriendo ${file.name} (${n + 1}/${items.length})`);
+      const data = new Uint8Array(await file.arrayBuffer());
+      const pdf = await pdfjsLib.getDocument({ data }).promise;
+      const pad = String(pdf.numPages).length < 3 ? 3 : String(pdf.numPages).length;
+      for (let p = 1; p <= pdf.numPages; p++) {
+        setProgress((n + (p - 1) / pdf.numPages) / items.length, `${file.name}: página ${p} de ${pdf.numPages}`);
+        const page = await pdf.getPage(p);
+        let viewport = page.getViewport({ scale: baseScale * (96 / 72) });
+        if (viewport.width * viewport.height > MAX_PIXELS) {
+          const k = Math.sqrt(MAX_PIXELS / (viewport.width * viewport.height));
+          viewport = page.getViewport({ scale: viewport.scale * k });
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const blob = await toBlob(canvas, quality);
+        if (!blob || blob.type !== 'image/webp') notWebp = true;
+        folder.file(`pagina-${String(p).padStart(pad, '0')}.webp`, blob);
+        canvas.width = canvas.height = 0;
+        page.cleanup();
+        totalPages++;
+      }
+      pdf.destroy();
+    } catch (err) {
+      errors.push(`${file.name}: ${err && err.message ? err.message : 'no se pudo convertir'}`);
+    }
+  }
+
+  if (notWebp) {
+    errors.push('Tu navegador no puede generar WebP (por ejemplo Safari antiguo). Usa Chrome, Edge o Firefox.');
+  }
+
+  setProgress(1, 'Creando ZIP…');
+  const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'STORE' }, m => {
+    $('status').textContent = `Creando ZIP… ${m.percent.toFixed(0)}%`;
+  });
+  if (zipUrl) URL.revokeObjectURL(zipUrl);
+  zipUrl = URL.createObjectURL(zipBlob);
+  $('download').href = zipUrl;
+  $('doneMsg').textContent = `Listo: ${totalPages} imagen${totalPages === 1 ? '' : 'es'} WebP generada${totalPages === 1 ? '' : 's'}`;
+  $('errors').innerHTML = errors.map(e => `<div>⚠ ${e.replace(/</g, '&lt;')}</div>`).join('');
+  $('progressCard').classList.add('hidden');
+  $('doneCard').classList.remove('hidden');
+  $('convert').disabled = false;
+};
+</script>
+</body>
+</html>
